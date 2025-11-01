@@ -1,0 +1,45 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  ANDROID_HOME: '/usr/local/lib/android/sdk'
+  GRADLE_USER_HOME: '$(Pipeline.Workspace)/.gradle'
+
+steps:
+  - task: Checkout@1
+    inputs:
+      clean: true
+
+  # Install JDK (required for Gradle)
+  - task: UseJavaVersion@1
+    inputs:
+      versionSpec: '17'
+      jdkArchitecture: 'x64'
+
+  # Cache Gradle dependencies for faster builds
+  - task: Cache@2
+    inputs:
+      key: 'gradle | "$(Agent.OS)" | build.gradle'
+      restoreKeys: |
+        gradle | "$(Agent.OS)"
+      path: $(GRADLE_USER_HOME)
+
+  # Grant execute permission to gradlew
+  - script: chmod +x gradlew
+    displayName: 'Grant execute permission for Gradle wrapper'
+
+  # Build the debug APK
+  - script: ./gradlew assembleDebug
+    displayName: 'Build Debug APK'
+
+  # Publish APK as pipeline artifact
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: 'app/build/outputs/apk/debug'
+      ArtifactName: 'APK'
+      publishLocation: 'Container'
