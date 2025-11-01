@@ -9,37 +9,81 @@ pool:
 variables:
   ANDROID_HOME: '/usr/local/lib/android/sdk'
   GRADLE_USER_HOME: '$(Pipeline.Workspace)/.gradle'
+  BUILD_DIR: 'app/build/outputs'
+  APK_PATH: '$(BUILD_DIR)/apk/debug/app-debug.apk'
 
-steps:
-  - task: Checkout@1
-    inputs:
-      clean: true
+stages:
+  # ----------------------
+  # Stage 1: Build + Test
+  # ----------------------
+  - stage: BuildAndTest
+    displayName: "Build and Test Android App"
+    jobs:
+      - job: Build
+        displayName: "Build & Run Tests"
+        steps:
+          - checkout: self
 
-  # Install JDK (required for Gradle)
-  - task: UseJavaVersion@1
-    inputs:
-      versionSpec: '17'
-      jdkArchitecture: 'x64'
+          - task: UseJavaVersion@1
+            inputs:
+              versionSpec: '17'
+              jdkArchitecture: 'x64'
+            displayName: "Set up JDK 17"
 
-  # Cache Gradle dependencies for faster builds
-  - task: Cache@2
-    inputs:
-      key: 'gradle | "$(Agent.OS)" | build.gradle'
-      restoreKeys: |
-        gradle | "$(Agent.OS)"
-      path: $(GRADLE_USER_HOME)
+          - task: Cache@2
+            inputs:
+              key: 'gradle | "$(Agent.OS)" | build.gradle'
+              restoreKeys: |
+                gradle | "$(Agent.OS)"
+              path: $(GRADLE_USER_HOME)
+            displayName: "Cache Gradle dependencies"
 
-  # Grant execute permission to gradlew
-  - script: chmod +x gradlew
-    displayName: 'Grant execute permission for Gradle wrapper'
+          - script: chmod +x gradlew
+            displayName: "Make Gradle wrapper executable"
 
-  # Build the debug APK
-  - script: ./gradlew assembleDebug
-    displayName: 'Build Debug APK'
+          - script: ./gradlew clean assembleDebug
+            displayName: "Build Debug APK"
 
-  # Publish APK as pipeline artifact
-  - task: PublishBuildArtifacts@1
-    inputs:
-      PathtoPublish: 'app/build/outputs/apk/debug'
-      ArtifactName: 'APK'
-      publishLocation: 'Container'
+          - script: ./gradlew test
+            displayName: "Run Unit Tests"
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFiles: '**/test-results/testDebugUnitTest/*.xml'
+              testRunTitle: 'Unit Tests'
+            condition: succeededOrFailed()
+            displayName: "Publish Test Results"
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(BUILD_DIR)/apk/debug'
+              ArtifactName: 'DebugAPK'
+              publishLocation: 'Container'
+            displayName: "Publish Debug APK as Artifact"
+
+  # ----------------------
+  # Stage 2: Deploy
+  # ----------------------
+  - stage: Deploy
+    displayName: "Deploy APK to Azure Blob Storage"
+    dependsOn: BuildAndTest
+    condition: succeeded()  # Only run if Build/Test succeeded
+    jobs:
+      - job: Upload
+        displayName: "Upload APK to Blob"
+        steps:
+          - task: DownloadBuildArtifacts@1
+            inputs:
+              artifactName: 'DebugAPK'
+              downloadPath: '$(Pipeline.Workspace)/artifacts'
+            displayName: "Download Build Artifacts"
+
+          - task: AzureFileCopy@4
+            inputs:
+              SourcePath: '$(Pipeline.Workspace)/artifacts/DebugAPK/app-debug.apk'
+              azureSubscription: 'AndroidBlobConnection'
+              Destination: 'AzureBlob'
+              storage: 'ashvinstorageaccount'
+              ContainerName: 'expenseappcontainer'
+            displayName: "Upload APK to Azure Blob"
+
