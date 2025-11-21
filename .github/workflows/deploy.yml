@@ -25,6 +25,10 @@ jobs:
     - name: Build Release APK
       run: ./gradlew assembleRelease
 
+    # 🔍 DEBUG STEP → shows actual APK/AAB path
+    - name: List all build outputs
+      run: ls -R app/build/outputs
+
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -32,5 +36,6 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ap-south-1
 
+    # ⚠️ You MUST replace YOUR_BUCKET_NAME
     - name: Upload APK to S3
       run: aws s3 cp app/build/outputs/apk/release/app-release.apk s3://YOUR_BUCKET_NAME/ --acl public-read
