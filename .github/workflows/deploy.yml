@@ -38,4 +38,4 @@ jobs:
 
     # ⚠️ You MUST replace YOUR_BUCKET_NAME
     - name: Upload APK to S3
-      run: aws s3 cp app/build/outputs/apk/release/app-release.apk s3://YOUR_BUCKET_NAME/ --acl public-read
+      run: aws s3 cp app/build/outputs/apk/release/app-release.apk s3://expense-tracker-app-ci-cd/ --acl public-read
