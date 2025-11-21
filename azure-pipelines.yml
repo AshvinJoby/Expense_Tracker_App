@@ -1,0 +1,90 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'Default'
+
+variables:
+  ANDROID_HOME: '/usr/local/lib/android/sdk'
+  GRADLE_USER_HOME: '$(Pipeline.Workspace)/.gradle'
+  BUILD_DIR: 'app/build/outputs'
+  APK_PATH: '$(BUILD_DIR)/apk/debug/app-debug.apk'
+
+stages:
+  # ----------------------
+  # Stage 1: Build + Test
+  # ----------------------
+  - stage: BuildAndTest
+    displayName: "Build and Test Android App"
+    jobs:
+      - job: Build
+        displayName: "Build & Run Tests"
+        steps:
+          - checkout: self
+
+          - task: JavaToolInstaller@0
+            inputs:
+              versionSpec: '17'
+              jdkArchitectureOption: 'x64'
+              jdkSourceOption: 'PreInstalled'
+            displayName: "Set up JDK 17"
+
+          - task: Cache@2
+            inputs:
+              key: 'gradle | "$(Agent.OS)" | build.gradle'
+              restoreKeys: |
+                gradle | "$(Agent.OS)"
+              path: $(GRADLE_USER_HOME)
+            displayName: "Cache Gradle dependencies"
+
+          - script: chmod +x gradlew
+            displayName: "Make Gradle wrapper executable"
+
+          - script: ./gradlew clean assembleDebug
+            displayName: "Build Debug APK"
+
+          - script: ./gradlew test
+            displayName: "Run Unit Tests"
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFiles: '**/test-results/testDebugUnitTest/*.xml'
+              testRunTitle: 'Unit Tests'
+            condition: succeededOrFailed()
+            displayName: "Publish Test Results"
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(BUILD_DIR)/apk/debug'
+              ArtifactName: 'DebugAPK'
+              publishLocation: 'Container'
+            displayName: "Publish Debug APK as Artifact"
+
+  # ----------------------
+  # Stage 2: Deploy
+  # ----------------------
+  - stage: Deploy
+    displayName: "Deploy APK to Azure Blob Storage"
+    dependsOn: BuildAndTest
+    condition: succeeded()  # Only run if Build/Test succeeded
+    jobs:
+      - job: Upload
+        displayName: "Upload APK to Blob"
+        steps:
+          - task: DownloadBuildArtifacts@1
+            inputs:
+              artifactName: 'DebugAPK'
+              downloadPath: '$(Pipeline.Workspace)/artifacts'
+            displayName: "Download Build Artifacts"
+
+          - task: AzureFileCopy@4
+            inputs:
+              SourcePath: '$(Pipeline.Workspace)/artifacts/DebugAPK/app-debug.apk'
+              azureSubscription: 'AndroidBlobConnection'
+              Destination: 'AzureBlob'
+              storage: 'ashvinstorageaccount'
+              ContainerName: 'expenseappcontainer'
+            displayName: "Upload APK to Azure Blob"
+
