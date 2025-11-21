@@ -8,32 +8,36 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+    - name: Checkout source
+      uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
 
-      - name: Give Gradle execution permission
-        run: chmod +x gradlew
+    - name: Give Gradle execution permission
+      run: chmod +x gradlew
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease
+    - name: Build Release APK
+      run: ./gradlew assembleRelease
 
-      # DEBUG: See actual file paths
-      - name: List all build outputs
-        run: ls -R app/build/outputs
+    # 🔍 MUST BE BEFORE AWS
+    - name: List all build outputs
+      run: |
+        echo "=== OUTPUTS START ==="
+        ls -R app/build/outputs || true
+        echo "=== OUTPUTS END ==="
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-south-1
 
-      - name: Upload APK to S3
-        run: aws s3 cp app/build/outputs/apk/release/app-release.apk s3://expense-tracker-app-ci-cd/ --acl public-read
+    - name: Upload APK to S3
+      run: aws s3 cp app/build/outputs/apk/release/app-release.apk s3://YOUR_BUCKET_NAME/ --acl public-read
